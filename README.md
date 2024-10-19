@@ -19,13 +19,10 @@ _The dev branch is unstable, and commits will be force-pushed there._
 
 - Displays a popup notification when a followed user performs various actions:
   - Sends or edits a message in any channel
-  - Deletes a message in any channel (requires [vc-message-logger-enhanced](https://github.com/Syncxv/vc-message-logger-enhanced/))
+  - Deletes a message in any channel
   - Starts typing in any channel
+  - Creates a thread
   - Updates their bio, profile picture, or global name (Work In Progress)
-  - Creates a thread (Work In Progress)
-  - Updates their presence (status, RPC, etc.)
-  - Joins a server you are in
-  - Joins a voice chat in a channel you have access to
 - All actions are configurable
 - Users can be added/removed via the right-click menu, or by adding their user IDs manually in the plugin settings
 
