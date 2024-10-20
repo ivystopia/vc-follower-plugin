@@ -9,6 +9,9 @@
 
 import { Channel, MessageJSON } from "discord-types/general";
 
+/**
+ * Payload for message update events.
+ */
 export interface MessageUpdatePayload {
     type: string;
     guildId: string;
@@ -16,6 +19,9 @@ export interface MessageUpdatePayload {
     message: MessageJSON;
 }
 
+/**
+ * Payload for message creation events.
+ */
 export interface MessageCreatePayload {
     type: string;
     guildId: string;
@@ -25,6 +31,9 @@ export interface MessageCreatePayload {
     isPushNotification: boolean;
 }
 
+/**
+ * Payload for message deletion events.
+ */
 export interface MessageDeletePayload {
     type: string;
     guildId: string;
@@ -33,12 +42,18 @@ export interface MessageDeletePayload {
     mlDeleted?: boolean;
 }
 
+/**
+ * Payload for typing start events.
+ */
 export interface TypingStartPayload {
     type: string;
     channelId: string;
     userId: string;
 }
 
+/**
+ * Payload for user profile update events.
+ */
 export interface UserUpdatePayload {
     type: string;
     user: {
@@ -59,12 +74,19 @@ export interface UserUpdatePayload {
         globalName: string | null;
     };
 }
+
+/**
+ * Payload for thread creation events.
+ */
 interface ThreadCreatePayload {
     type: string;
     isNewlyCreated: boolean;
     channel: Channel;
 }
 
+/**
+ * Types of events the plugin subscribes to.
+ */
 export type subscribedEvents =
     | "MESSAGE_CREATE"
     | "MESSAGE_DELETE"
