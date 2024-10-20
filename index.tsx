@@ -7,6 +7,7 @@
 // The above header is a linting requirement of the Vencord project workspace.
 // This plugin is unaffiliated with the Vencord project.
 
+// External Imports
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { Notifications } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
@@ -26,69 +27,20 @@ import {
     UserUpdatePayload,
 } from "./types";
 
-// Utility Functions
-
-function addToWhitelist(id: string): void {
-    const items = settings.store.whitelistedIds
-        ? settings.store.whitelistedIds.split(",").map(item => item.trim()).filter(item => item !== "")
-        : [];
-    if (!items.includes(id)) {
-        items.push(id);
-        settings.store.whitelistedIds = items.join(",");
-        logger.info(`Added ID ${id} to whitelist.`);
-    } else {
-        logger.warn(`ID ${id} is already in the whitelist.`);
-    }
-}
-
-function removeFromWhitelist(id: string): void {
-    const items = settings.store.whitelistedIds
-        ? settings.store.whitelistedIds.split(",").map(item => item.trim()).filter(item => item !== "")
-        : [];
-    const index = items.indexOf(id);
-    if (index !== -1) {
-        items.splice(index, 1);
-        settings.store.whitelistedIds = items.join(",");
-        logger.info(`Removed ID ${id} from whitelist.`);
-    } else {
-        logger.warn(`ID ${id} not found in the whitelist.`);
-    }
-}
-
-function isInWhitelist(id: string): boolean {
-    const items = settings.store.whitelistedIds
-        ? settings.store.whitelistedIds.split(",").map(item => item.trim()).filter(item => item !== "")
-        : [];
-    return items.includes(id);
-}
-
-function convertSnakeCaseToCamelCase(obj: any): any {
-    if (!Array.isArray(obj) && (typeof obj !== "object" || obj === null)) return obj;
-
-    if (Array.isArray(obj)) return obj.map(convertSnakeCaseToCamelCase);
-
-    return Object.keys(obj).reduce((newObj, key) => {
-        const camelCaseKey = key.replace(/_([a-z])/gi, (_, char) => char.toUpperCase());
-        const value = convertSnakeCaseToCamelCase(obj[key]);
-        return { ...newObj, [camelCaseKey]: value };
-    }, {} as any);
-}
-
-const logger = new Logger("Follower");
-
-// Define a base64-encoded transparent icon
-const TRANSPARENT_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NkYGD4DwABBAEAQ6yD0gAAAABJRU5ErkJggg==";
-
-// Import MessageLoggerEnhanced depending on the Vencord environment
-// TODO: Loop over a list of possible locations
-// TODO: Fix the "@ts-ignore" hack
+/**
+ * Dynamically imports the LoggedMessageManager from possible locations.
+ * Ensures compatibility with different Vencord environments.
+ * @returns The loggedMessages module or null if failed to load.
+ */
 async function importLoggedMessages() {
     let module;
     try {
+        // Attempt to import from EquiCord plugins
         // @ts-ignore
         module = await import("equicordplugins/messageLoggerEnhanced/LoggedMessageManager");
     } catch {
         try {
+            // Fallback to user plugins
             // @ts-ignore
             module = await import("userplugins/vc-message-logger-enhanced/LoggedMessageManager");
         } catch (error) {
@@ -98,8 +50,13 @@ async function importLoggedMessages() {
     return module ? module.loggedMessages : null;
 }
 
-// Vencord plugin settings
+// Base64-encoded transparent icon
+const TRANSPARENT_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NkYGD4DwABBAEAQ6yD0gAAAABJRU5ErkJggg==";
 
+// Logger instance for the plugin
+const logger = new Logger("Follower");
+
+// Plugin settings that appear in the Vencord GUI
 var settings = definePluginSettings({
     whitelistedIds: {
         default: "",
@@ -133,7 +90,83 @@ var settings = definePluginSettings({
     },
 });
 
-// Helper function to switch to a specific message
+// Stores previous user profiles for detecting changes
+// TODO: Create our own representation of a User
+const oldUsers: Record<string, UserUpdatePayload> = {};
+
+// Stores logged messages
+let loggedMessages: Record<string, Message> = {};
+
+/**
+ * Adds a user ID to the list of followed users.
+ * @param id - The user ID to add.
+ */
+function addToWhitelist(id: string): void {
+    const items = settings.store.whitelistedIds
+        ? settings.store.whitelistedIds.split(",").map(item => item.trim()).filter(item => item !== "")
+        : [];
+    if (!items.includes(id)) {
+        items.push(id);
+        settings.store.whitelistedIds = items.join(",");
+        logger.info(`Added ID ${id} to whitelist.`);
+    } else {
+        logger.warn(`ID ${id} is already in the whitelist.`);
+    }
+}
+
+/**
+ * Removes a user ID to the list of followed users.
+ * @param id - The user ID to remove.
+ */
+function removeFromWhitelist(id: string): void {
+    const items = settings.store.whitelistedIds
+        ? settings.store.whitelistedIds.split(",").map(item => item.trim()).filter(item => item !== "")
+        : [];
+    const index = items.indexOf(id);
+    if (index !== -1) {
+        items.splice(index, 1);
+        settings.store.whitelistedIds = items.join(",");
+        logger.info(`Removed ID ${id} from whitelist.`);
+    } else {
+        logger.warn(`ID ${id} not found in the whitelist.`);
+    }
+}
+
+/**
+ * Checks if a user ID is in the list of followed users.
+ * @param id - The user ID to check.
+ * @returns True if the ID is whitelisted, otherwise false.
+ */
+function isInWhitelist(id: string): boolean {
+    const items = settings.store.whitelistedIds
+        ? settings.store.whitelistedIds.split(",").map(item => item.trim()).filter(item => item !== "")
+        : [];
+    return items.includes(id);
+}
+
+/**
+ * Converts snake_case keys in an object to camelCase.
+ * @param obj - The object to convert.
+ * @returns A new object with camelCase keys.
+ */
+function convertSnakeCaseToCamelCase(obj: any): any {
+    if (!Array.isArray(obj) && (typeof obj !== "object" || obj === null)) return obj;
+
+    if (Array.isArray(obj)) return obj.map(convertSnakeCaseToCamelCase);
+
+    return Object.keys(obj).reduce((newObj, key) => {
+        const camelCaseKey = key.replace(/_([a-z])/gi, (_, char) => char.toUpperCase());
+        const value = convertSnakeCaseToCamelCase(obj[key]);
+        return { ...newObj, [camelCaseKey]: value };
+    }, {} as any);
+}
+
+/**
+ * Switches the view to a specific message.
+ * @param guildId - The guild ID.
+ * @param channelId - The channel ID (optional).
+ * @param messageId - The message ID (optional).
+ */
 const switchToMsg = (guildId: string, channelId?: string, messageId?: string) => {
     const { transitionToGuildSync } = findByProps("transitionToGuildSync");
     const { selectChannel } = findByProps("selectChannel");
@@ -147,7 +180,13 @@ const switchToMsg = (guildId: string, channelId?: string, messageId?: string) =>
         });
 };
 
-// Helper function to create notifications
+/**
+ * Creates a notification.
+ * @param title - The notification title.
+ * @param body - The notification body.
+ * @param onClick - Callback when the notification is clicked.
+ * @param icon - The notification icon (optional).
+ */
 const createNotification = (
     title: string,
     body: string,
@@ -162,12 +201,22 @@ const createNotification = (
     });
 };
 
-// Helper function to check if a user is whitelisted and not in the current channel
+/**
+ * Determines whether to show a notification based on whitelist and current channel.
+ * @param userId - The user ID.
+ * @param channelId - The channel ID.
+ * @returns True if a notification should be shown, otherwise false.
+ */
 const shouldNotify = (userId: string, channelId: string | undefined): boolean => {
     return isInWhitelist(userId) && getCurrentChannel()?.id !== channelId;
 };
 
-// Takes a payload and returns the correct message string based on settings
+/**
+ * Generates the message body for notifications based on settings.
+ * @param store - The settings store.
+ * @param payload - The message payload.
+ * @returns The formatted message body.
+ */
 function getMessageBody(store: typeof settings.store, payload: MessageCreatePayload | MessageUpdatePayload): string {
     if (!store.showMessageBody) return "Click to jump to the message";
 
@@ -178,11 +227,13 @@ function getMessageBody(store: typeof settings.store, payload: MessageCreatePayl
     return charLimit > 0 && baseContent.length > charLimit ? `${baseContent.substring(0, charLimit)}...` : baseContent;
 }
 
-// Initialise Records for later use
-const oldUsers: Record<string, UserUpdatePayload> = {};
-let loggedMessages: Record<string, Message> = {};
+/* ============================ */
+/*      Context Menu Patch      */
+/* ============================ */
 
-// Define the context menu option, allowing users to be added/removed from the list via the right-click menu
+/**
+ * Define the patch for the context menu, which contains the option to follow/unfollow a user.
+ */
 const contextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
     if (!props || props.user.id === UserStore.getCurrentUser().id) return;
 
@@ -200,18 +251,21 @@ const contextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
     }
 };
 
-// Define the Vencord plugin
+/* ============================ */
+/*      Plugin Definition       */
+/* ============================ */
+
 const _plugin: PluginDef & Record<string, any> = {
     name: "Follower",
     description: "Add additional notification features for your friends' activity on Discord",
     authors: [
         {
             id: 835582393230164018n,
-            name: "h.helix",
+            name: "h.helix", // Repository maintainer
         },
         {
             id: 253302259696271360n,
-            name: "zastix",
+            name: "zastix", // Maintainer of initial plugin
         },
     ],
     dependencies: ["MessageLoggerEnhanced"],
@@ -402,7 +456,7 @@ const _plugin: PluginDef & Record<string, any> = {
         loggedMessages = (await importLoggedMessages()) || {};
     },
     stop() {
-        // TODO: Is this needed at all?
+        // Optional: Clean up resources or listeners
     },
     async followUser(id: string) {
         const user = UserStore.getUser(id);
@@ -439,6 +493,6 @@ const _plugin: PluginDef & Record<string, any> = {
     },
 };
 
-// Vencord plugin boilerplate code
+// Make the plugin available to Vencord
 export default definePlugin(_plugin);
 export { settings };
